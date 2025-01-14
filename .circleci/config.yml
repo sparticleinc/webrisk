@@ -1,0 +1,78 @@
+version: 2.1
+orbs:
+  aws-ecr: circleci/aws-ecr@7.0.0
+
+jobs:
+  build-and-push:
+    machine:
+      image: ubuntu-2004:2023.10.1
+    resource_class: medium
+    parameters:
+      path:
+        type: string
+      repo:
+        type: string
+      dockerfile:
+        type: string
+    working_directory: ~/project
+    steps:
+      - aws-ecr/build-and-push-image:
+          checkout: true
+          account-url: AWS_ECR_ACCOUNT_URL
+          aws-access-key-id: AWS_ACCESS_KEY_ID
+          aws-secret-access-key: AWS_SECRET_ACCESS_KEY
+          create-repo: false
+          dockerfile: <<parameters.dockerfile>>
+          path: <<parameters.path>>
+          region: AWS_REGION
+          repo: <<parameters.repo>>
+          tag: "${CIRCLE_SHA1}"
+  deploy:
+    machine:
+      image: ubuntu-2004:202111-02
+    resource_class: medium
+    parameters:
+      docker-tag:
+        type: string
+      path:
+        type: string
+      deploy-name:
+        type: string
+      deploy-namespace:
+        type: string
+    steps:
+      # - add_ssh_keys:
+      - run:
+          name: kubectl apply
+          command: |
+            CMD='/home/ubuntu/cluster/deploy-v3.sh <<parameters.path>> <<parameters.docker-tag>>'${CIRCLE_SHA1}' <<parameters.deploy-name>> <<parameters.deploy-namespace>>'
+            echo $CMD
+            ssh ${USER_NAME}@${HOST_NAME} ${CMD}
+
+workflows:
+  webrisk-cicd:
+    jobs:
+      - build-and-push:
+          name: webrisk-build-and-push
+          context:
+            - ecr-new
+          path: .
+          dockerfile: Dockerfile
+          repo: webrisk
+          filters:
+            branches:
+              only:
+                - master
+      - deploy:
+          name: webrisk-deploy
+          path: "/home/ubuntu/cluster/web-app/webrisk/deploy.yaml"
+          deploy-name: webrisk
+          deploy-namespace: web-app
+          context:
+            - ecr-new
+          filters:
+            branches:
+              only:
+                - master
+          requires:
+            - webrisk-build-and-push
