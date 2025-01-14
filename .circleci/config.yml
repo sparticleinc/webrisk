@@ -32,8 +32,6 @@ jobs:
       image: ubuntu-2004:202111-02
     resource_class: medium
     parameters:
-      docker-tag:
-        type: string
       path:
         type: string
       deploy-name:
